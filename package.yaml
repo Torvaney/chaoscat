@@ -24,8 +24,8 @@ dependencies:
 - containers
 - datetime
 - github
+- mwc-random
 - vector
-- random
 
 library:
   source-dirs: src
