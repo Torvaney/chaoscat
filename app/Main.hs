@@ -16,28 +16,14 @@ import GitHub.Auth
 import Lib
 
 
-{--
-
-type PullRequestID = Int
-
-type PullRequestRate = Float
-
-data PullRequest = PullRequest
-    { id             :: PullRequestID  -- redundant?
-    , createdAt      :: DateTime.DateTime    -- redundant?
-    , secondsToClose :: Seconds
-    }
-
---}
-
 -- A PR can have a time set or "pending". We use this to delay RNG (and therefore limit the need for IO)
-data TimeToMerge
-    = Seconds Integer
-    | Pending
+data MergeDate
+    = MergeAt DateTime.DateTime
+    | Pending DateTime.DateTime
     deriving (Show)
 
 
-type State = Map.Map GitHub.IssueNumber TimeToMerge
+type State = Map.Map GitHub.IssueNumber MergeDate
 
 
 delayMilliseconds ms = CC.threadDelay (ms * 1000)
@@ -53,16 +39,23 @@ getPullRequests author repo = do
         Right xs -> return xs
 
 
+-- TODO: swap args and use foldr? Is that more idiomatic?
+insertPR :: State -> GitHub.SimplePullRequest -> State
+insertPR state pr =
+    Map.insertWith (flip const) issueNumber (Pending createdAt) state
+    where
+        createdAt   = GitHub.simplePullRequestCreatedAt pr
+        issueNumber = GitHub.simplePullRequestNumber pr
+
+
 insertNewPRs :: Vector.Vector GitHub.SimplePullRequest -> State -> State
 insertNewPRs prs state =
-    foldl (\s pr -> Map.insertWith (flip const) pr Pending s) state issueNumbers
-    where
-        issueNumbers = fmap GitHub.simplePullRequestNumber prs
+    foldl insertPR state prs
 
 
-isExpired :: GitHub.IssueNumber -> TimeToMerge -> Bool
-isExpired issueNumber (Seconds secs) = True
-isExpired _ Pending = True
+isExpired :: DateTime.DateTime -> MergeDate -> Bool
+isExpired now (MergeAt d) = now > d
+isExpired _   (Pending _) = False
 
 
 updatePullRequests :: DateTime.DateTime
@@ -70,7 +63,7 @@ updatePullRequests :: DateTime.DateTime
                    -> State
                    -> (State, State)
 updatePullRequests now openPRs state =
-    Map.partitionWithKey isExpired $  -- TODO actually work out if age > state
+    Map.partition (isExpired now) $  -- TODO actually work out if age > state
     insertNewPRs openPRs $
     Map.filterWithKey isOpen state
     where
@@ -80,10 +73,12 @@ updatePullRequests now openPRs state =
 
 initialisePullRequests :: State -> IO State
 initialisePullRequests state =
-    -- TODO replace this with actual RNG
+    -- TODO replace this with actual RNG for the number of seconds
     pure $
-    Map.map (\case Pending   -> Seconds 3
-                   Seconds s -> Seconds s) state
+    Map.map
+        (\case Pending d -> MergeAt (DateTime.addSeconds 95 d)
+               MergeAt d -> MergeAt d)
+        state
 
 
 doChaos :: State -> GitHub.Name GitHub.Owner -> GitHub.Name GitHub.Repo -> IO ()
@@ -91,23 +86,23 @@ doChaos state author repo = do
     now <- DateTime.getCurrentTime
     prs <- getPullRequests author repo
 
-    let (newState, toMerge) = updatePullRequests now prs state
+    let (toMerge, newState) = updatePullRequests now prs state
 
-    -- debugging/development jank
+    -- janky debugging/development cruft
     print $ show now
+    print $ show toMerge
     print $ show newState
 
     delayMilliseconds 5000
 
     -- TODO: do any merges at this point
     rng <- Random.create
-    -- ...
+    -- mergePullRequests now toMerge
 
     -- Initialise any unset PRs using RNG
     newState <- initialisePullRequests newState
 
     doChaos newState author repo
-
 
 
 main :: IO ()
