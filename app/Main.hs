@@ -3,11 +3,14 @@ module Main where
 
 import qualified Control.Concurrent as CC
 import qualified Control.Monad as M
--- import qualified Control.Monad.Primitive as Prim
+import qualified Data.ByteString.Char8 as C
 import qualified Data.DateTime as DateTime
 import qualified Data.Map as Map
+import qualified Data.Text as T
 import qualified Data.Vector as Vector
+import qualified GitHub.Data
 import qualified GitHub.Endpoints.PullRequests as GitHub
+import qualified System.Environment as Env
 import qualified System.Random.MWC as Random
 import qualified System.Random.MWC.Distributions as RandDist
 
@@ -93,51 +96,58 @@ initialisePullRequests gen state =
     sequence $ Map.map (initialisePullRequest gen) state
 
 
+mergePullRequest :: Config -> GitHub.IssueNumber -> IO (Either GitHub.Error GitHub.MergeResult)
+mergePullRequest config id =
+    GitHub.mergePullRequest
+        (auth  config)
+        (owner config)
+        (repo  config)
+        id
+        (Just "Whoops - time's up!")
+
+
 mergePullRequests :: Config -> State -> IO ()
 mergePullRequests config state =
-    print "pass!"
-    -- GitHub.mergePullRequest (auth config) (owner config)
+    mapM_ (mergePullRequest config) (Map.keys state)
 
 
-doChaos :: Config -> State -> IO ()
-doChaos config state = do
+doChaos :: Random.GenIO -> Config -> State -> IO ()
+doChaos gen config state = do
     now <- DateTime.getCurrentTime
     prs <- getPullRequests (owner config) (repo config)
 
     let (toMerge, newState) = updatePullRequests now prs state
 
     -- janky debugging/development cruft
+    print "---"
     print $ show now
     print $ show toMerge
     print $ show newState
+    print "---"
 
-    delayMilliseconds 5000
+    delayMilliseconds 1000
 
-    gen <- Random.create
-    -- mergePullRequests now toMerge
+    mergePullRequests config toMerge
 
-    -- Initialise any unset PRs using RNG
+    -- Initialise any new PRs using RNG
     newState <- initialisePullRequests gen newState
 
-    doChaos config newState
+    doChaos gen config newState
 
 
 main :: IO ()
 main = do
-    -- config (TODO: get from environment)
-    let owner = "torvaney"
-    let repo   = "example-pr-repo"
-    -- auth <- ...
-    -- minTime <- ..
-    -- rate <- ...
+    owner <- Env.getEnv "CHAOSCAT_OWNER"
+    repo  <- Env.getEnv "CHAOSCAT_REPO"
+    auth  <- Env.getEnv "CHAOSCAT_OATH"
 
-    let config = Config { owner   = owner
-                        , repo    = repo
-                        , auth    = OAuth "abc"
+    let config = Config { owner   = GitHub.Data.mkOwnerName $ T.pack owner
+                        , repo    = GitHub.Data.mkRepoName  $ T.pack repo
+                        , auth    = OAuth (C.pack auth)
                         , minTime = 0
                         , rate    = 86400  -- 1 day in seconds
                         }
 
-    -- x <- GitHub.pullRequestsFor author repo
+    gen <- Random.createSystemRandom
 
-    doChaos config Map.empty
+    doChaos gen config Map.empty

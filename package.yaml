@@ -21,11 +21,13 @@ description:         Please see the README on GitHub at <https://github.com/torv
 
 dependencies:
 - base >= 4.7 && < 5
+- bytestring
 - containers
 - datetime
 - github
 - mwc-random
 - primitive
+- text
 - vector
 
 library:
