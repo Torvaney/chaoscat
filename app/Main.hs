@@ -42,7 +42,6 @@ type State = Map.Map GitHub.IssueNumber MergeDate
 delayMilliseconds ms = CC.threadDelay (ms * 1000)
 
 
--- TODO: swap args and use foldr? Is that more idiomatic?
 insertPR :: State -> GitHub.SimplePullRequest -> State
 insertPR state pr =
     Map.insertWith (flip const) issueNumber (Pending createdAt) state
