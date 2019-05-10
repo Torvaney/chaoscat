@@ -20,11 +20,11 @@ import Lib
 
 
 data Config = Config
-    { owner   :: GitHub.Name GitHub.Owner
-    , repo    :: GitHub.Name GitHub.Repo
-    , auth    :: Auth
-    , minTime :: Double
-    , rate    :: Double
+    { owner    :: GitHub.Name GitHub.Owner
+    , repo     :: GitHub.Name GitHub.Repo
+    , auth     :: Auth
+    , minHours :: Double
+    , rate     :: Double
     }
     deriving (Show)
 
@@ -84,16 +84,16 @@ getPullRequests author repo = do
         Right xs -> return xs
 
 
-initialisePullRequest :: Random.GenIO -> MergeDate -> IO MergeDate
-initialisePullRequest gen (MergeAt d) = pure $ MergeAt d
-initialisePullRequest gen (Pending d) = do
-    secs <- RandDist.exponential (1 / 86400) gen
-    return (MergeAt (DateTime.addSeconds (round secs) d))
+initialisePullRequest :: Random.GenIO -> Config -> MergeDate -> IO MergeDate
+initialisePullRequest gen config (MergeAt d) = pure $ MergeAt d
+initialisePullRequest gen config (Pending d) = do
+    secs <- RandDist.exponential (1 / rate config) gen
+    return (MergeAt (DateTime.addSeconds (round (minHours config + secs)) d))
 
 
-initialisePullRequests :: Random.GenIO -> State -> IO State
-initialisePullRequests gen state =
-    sequence $ Map.map (initialisePullRequest gen) state
+initialisePullRequests :: Random.GenIO -> Config -> State -> IO State
+initialisePullRequests gen config state =
+    sequence $ Map.map (initialisePullRequest gen config) state
 
 
 mergePullRequest :: Config -> GitHub.IssueNumber -> IO (Either GitHub.Error GitHub.MergeResult)
@@ -130,22 +130,24 @@ doChaos gen config state = do
     mergePullRequests config toMerge
 
     -- Initialise any new PRs using RNG
-    newState <- initialisePullRequests gen newState
+    newState <- initialisePullRequests gen config newState
 
     doChaos gen config newState
 
 
 main :: IO ()
 main = do
-    owner <- Env.getEnv "CHAOSCAT_OWNER"
-    repo  <- Env.getEnv "CHAOSCAT_REPO"
-    auth  <- Env.getEnv "CHAOSCAT_OATH"
+    owner    <- Env.getEnv "CHAOSCAT_OWNER"
+    repo     <- Env.getEnv "CHAOSCAT_REPO"
+    auth     <- Env.getEnv "CHAOSCAT_OATH"
+    rate     <- Env.getEnv "CHAOSCAT_RATE"     -- Mean hours before closing (+ minHours)
+    minHours <- Env.getEnv "CHAOSCAT_MINHOURS"  -- Min. hours before a PR can be closed
 
-    let config = Config { owner   = GitHub.Data.mkOwnerName $ T.pack owner
-                        , repo    = GitHub.Data.mkRepoName  $ T.pack repo
-                        , auth    = OAuth (C.pack auth)
-                        , minTime = 0
-                        , rate    = 86400  -- 1 day in seconds
+    let config = Config { owner    = GitHub.Data.mkOwnerName $ T.pack owner
+                        , repo     = GitHub.Data.mkRepoName  $ T.pack repo
+                        , auth     = OAuth (C.pack auth)
+                        , minHours = 360 * read minHours::Double
+                        , rate     = 360 * read rate::Double
                         }
 
     gen <- Random.createSystemRandom
