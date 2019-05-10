@@ -118,14 +118,7 @@ doChaos gen config state = do
 
     let (toMerge, newState) = updatePullRequests now prs state
 
-    -- janky debugging/development cruft
-    print "---"
-    print $ show now
-    print $ show toMerge
-    print $ show newState
-    print "---"
-
-    delayMilliseconds 1000
+    delayMilliseconds (60 * 1000)
 
     mergePullRequests config toMerge
 
