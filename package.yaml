@@ -25,6 +25,7 @@ dependencies:
 - datetime
 - github
 - mwc-random
+- primitive
 - vector
 
 library:
