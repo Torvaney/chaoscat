@@ -20,11 +20,11 @@ import Lib
 
 
 data Config = Config
-    { owner    :: GitHub.Name GitHub.Owner
-    , repo     :: GitHub.Name GitHub.Repo
-    , auth     :: Auth
-    , minHours :: Double
-    , rate     :: Double
+    { owner   :: GitHub.Name GitHub.Owner
+    , repo    :: GitHub.Name GitHub.Repo
+    , auth    :: Auth
+    , minSecs :: Double
+    , rate    :: Double
     }
     deriving (Show)
 
@@ -87,7 +87,7 @@ initialisePullRequest :: Random.GenIO -> Config -> MergeDate -> IO MergeDate
 initialisePullRequest gen config (MergeAt d) = pure $ MergeAt d
 initialisePullRequest gen config (Pending d) = do
     secs <- RandDist.exponential (1 / rate config) gen
-    return (MergeAt (DateTime.addSeconds (round (minHours config + secs)) d))
+    return (MergeAt (DateTime.addSeconds (round (minSecs config + secs)) d))
 
 
 initialisePullRequests :: Random.GenIO -> Config -> State -> IO State
@@ -132,14 +132,14 @@ main = do
     owner    <- Env.getEnv "CHAOSCAT_OWNER"
     repo     <- Env.getEnv "CHAOSCAT_REPO"
     auth     <- Env.getEnv "CHAOSCAT_OATH"
-    rate     <- Env.getEnv "CHAOSCAT_RATE"     -- Mean hours before closing (+ minHours)
+    rate     <- Env.getEnv "CHAOSCAT_RATE"      -- Mean hours before closing (+ minHours)
     minHours <- Env.getEnv "CHAOSCAT_MINHOURS"  -- Min. hours before a PR can be closed
 
-    let config = Config { owner    = GitHub.Data.mkOwnerName $ T.pack owner
-                        , repo     = GitHub.Data.mkRepoName  $ T.pack repo
-                        , auth     = OAuth (C.pack auth)
-                        , minHours = 360 * read minHours::Double
-                        , rate     = 360 * read rate::Double
+    let config = Config { owner   = GitHub.Data.mkOwnerName $ T.pack owner
+                        , repo    = GitHub.Data.mkRepoName  $ T.pack repo
+                        , auth    = OAuth (C.pack auth)
+                        , minSecs = 3600 * read minHours::Double  -- in seconds
+                        , rate    = 3600 * read rate::Double      -- in seconds
                         }
 
     gen <- Random.createSystemRandom
