@@ -73,11 +73,9 @@ updatePullRequests now openPRs state =
         isOpen issueNo _ = issueNo `elem` openIssueNumbers
 
 
-getPullRequests :: GitHub.Name GitHub.Owner
-                -> GitHub.Name GitHub.Repo
-                -> IO (Vector.Vector GitHub.SimplePullRequest)
-getPullRequests author repo = do
-    prs <- GitHub.pullRequestsFor author repo
+getPullRequests :: Config -> IO (Vector.Vector GitHub.SimplePullRequest)
+getPullRequests config = do
+    prs <- GitHub.pullRequestsFor' (Just (auth config)) (owner config) (repo config)
     case prs of
         Left a   -> return Vector.empty  -- yikes! fix this
         Right xs -> return xs
@@ -113,7 +111,7 @@ mergePullRequests config state =
 doChaos :: Random.GenIO -> Config -> State -> IO ()
 doChaos gen config state = do
     now <- DateTime.getCurrentTime
-    prs <- getPullRequests (owner config) (repo config)
+    prs <- getPullRequests config
 
     let (toMerge, newState) = updatePullRequests now prs state
 
