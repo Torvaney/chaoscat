@@ -2,7 +2,7 @@
 # ChaosCat
 
 Chaos engineering for Pull Requests. ChaosCat merges open pull requests
-at random subject to configurable parameters.
+at random, subject to configurable parameters.
 
 Clone and run with stack:
 
@@ -35,8 +35,10 @@ You can also set a minimum amount of time before a Pull Request gets
 merged, with the `CHAOSCAT_MINHOURS` environment variable.
 
 We can see what this distribution looks like in practice when applied to
-the torvaney/example-pr-repo repo with a minimum time of 0.15 and a rate
-of 0.5 (30):
+the
+[torvaney/example-pr-repo](https://github.com/torvaney/example-pr-repo)
+repo with a minimum time of 0.15 hours (9 mins) and a rate of 0.5 hours
+(30 mins):
 
 ![](README_files/figure-gfm/plot-pr-distribution-1.png)<!-- -->
 
@@ -46,8 +48,8 @@ the exponential curve as expected (pink line).
 
 ## But… why?
 
-ChaosCat is a response to the question: what if we applied the
-principles of [Chaos
+ChaosCat is a response to the question no one has been asking: what if
+we applied the principles of [Chaos
 Engineering](https://en.wikipedia.org/wiki/Chaos_engineering) to our
 development practices themselves?
 
@@ -57,7 +59,7 @@ development practices themselves?
 > order to build confidence in the system’s capability to withstand
 > turbulent conditions in production.
 
-In the same way, if you want to ensure that you can ship features to
+In the same way, if we want to ensure that you can ship features to
 production frequently, and gracefully handle bugs, what better way than
 to ship features… automatically?
 
