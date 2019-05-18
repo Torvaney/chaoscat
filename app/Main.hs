@@ -16,8 +16,6 @@ import qualified System.Random.MWC.Distributions as RandDist
 
 import GitHub.Auth
 
-import Lib
-
 
 data Config = Config
     { owner   :: GitHub.Name GitHub.Owner
@@ -29,17 +27,23 @@ data Config = Config
     deriving (Show)
 
 
--- A PR can have a time set or "pending". We use this to delay RNG (and therefore limit the need for IO)
+-- A PR can have a time set or "pending". We use this to delay RNG and therefore
+-- separate/isolate IO.
 data MergeDate
     = MergeAt DateTime.DateTime
     | Pending DateTime.DateTime
     deriving (Show)
 
 
+-- The program's state is simply a mapping of open Pull Requests to the time that
+-- they should be merged
 type State = Map.Map GitHub.IssueNumber MergeDate
 
 
 delayMilliseconds ms = CC.threadDelay (ms * 1000)
+
+
+hoursToSeconds hours = 60 * 60 * hours
 
 
 insertPR :: State -> GitHub.SimplePullRequest -> State
@@ -60,6 +64,8 @@ isExpired now (MergeAt d) = d < now
 isExpired _   (Pending _) = False
 
 
+-- Insert any new PRs into the app state with 'pending' status, and split out any
+-- PRs which have "expired" (exceeded their merge-at time)
 updatePullRequests :: DateTime.DateTime
                    -> Vector.Vector GitHub.SimplePullRequest
                    -> State
@@ -73,24 +79,27 @@ updatePullRequests now openPRs state =
         isOpen issueNo _ = issueNo `elem` openIssueNumbers
 
 
+-- Fetch the open PRs from GitHub. On fail, do nothing(!)
 getPullRequests :: Config -> IO (Vector.Vector GitHub.SimplePullRequest)
 getPullRequests config = do
     prs <- GitHub.pullRequestsFor' (Just (auth config)) (owner config) (repo config)
     case prs of
-        Left a   -> return Vector.empty  -- yikes! fix this
+        Left a   -> return Vector.empty  -- yikes! fix this?
         Right xs -> return xs
 
 
-initialisePullRequest :: Random.GenIO -> Config -> MergeDate -> IO MergeDate
-initialisePullRequest gen config (MergeAt d) = pure $ MergeAt d
-initialisePullRequest gen config (Pending d) = do
+-- Set a merge time for a PR if it has "Pending" status. If it already has a
+-- time set, do nothing
+setMergeAt :: Random.GenIO -> Config -> MergeDate -> IO MergeDate
+setMergeAt gen config (MergeAt d) = pure $ MergeAt d
+setMergeAt gen config (Pending d) = do
     secs <- RandDist.exponential (1 / rate config) gen
     return (MergeAt (DateTime.addSeconds (round (minSecs config + secs)) d))
 
 
 initialisePullRequests :: Random.GenIO -> Config -> State -> IO State
 initialisePullRequests gen config state =
-    sequence $ Map.map (initialisePullRequest gen config) state
+    sequence $ Map.map (setMergeAt gen config) state
 
 
 mergePullRequest :: Config -> GitHub.IssueNumber -> IO (Either GitHub.Error GitHub.MergeResult)
@@ -136,8 +145,8 @@ main = do
     let config = Config { owner   = GitHub.Data.mkOwnerName $ T.pack owner
                         , repo    = GitHub.Data.mkRepoName  $ T.pack repo
                         , auth    = OAuth (C.pack auth)
-                        , minSecs = 3600 * read minHours::Double  -- in seconds
-                        , rate    = 3600 * read rate::Double      -- in seconds
+                        , minSecs = hoursToSeconds $ read minHours::Double
+                        , rate    = hoursToSeconds $ read rate::Double
                         }
 
     gen <- Random.createSystemRandom
